@@ -70,7 +70,7 @@ body {
 }
 
 /* faint dotted table-top texture behind the canvas */
-.tabletop {
+.canvas-dots {
   background-image: radial-gradient(color-mix(in oklab, var(--line-2) 70%, transparent) 1px, transparent 1px);
   background-size: 18px 18px;
 }

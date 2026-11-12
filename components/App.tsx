@@ -388,7 +388,7 @@ export default function App() {
         </div>
       )}
 
-      <main className="tabletop flex-1">
+      <main className="canvas-dots flex-1">
         <div className="mx-auto grid max-w-[1500px] grid-cols-[minmax(0,1fr)] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_288px]">
           {/* ---------- canvas ---------- */}
           <section className="min-w-0 space-y-5">
