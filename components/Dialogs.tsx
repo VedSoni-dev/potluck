@@ -6,6 +6,7 @@ import { SHARE_PARAM, encodeSpace } from "@/lib/share";
 import { DEFAULT_MODEL } from "@/lib/store";
 import { TEMPLATES, type Template } from "@/lib/templates";
 import type { Space } from "@/lib/types";
+import { PublikChoice } from "./PublikGate";
 import { TOOL_HUE, TOOL_ICON } from "./ToolCard";
 import { Modal, btnGhost, btnPrimary, field } from "./ui";
 
@@ -32,6 +33,7 @@ export function SettingsDialog({
           onSave(k.trim(), m.trim());
         }}
       >
+        <PublikChoice />
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Anthropic API key</span>
           <div className="relative">
@@ -54,9 +56,9 @@ export function SettingsDialog({
             </button>
           </div>
           <span className="block text-xs leading-relaxed text-muted">
-            Stored only in this browser (localStorage). Each request sends it to this app&apos;s <code>/api/agent</code> route,
-            which forwards it to Anthropic for that one call. It is never saved or logged on the server. Without a key,
-            requests match the starter templates.
+            Used when you pick My own key. Stored only in this browser (localStorage). Each request sends it to this
+            app&apos;s <code>/api/agent</code> route, which forwards it to Anthropic for that one call. It is never saved
+            or logged on the server. Without a key or a publik plan, requests match the starter templates.
           </span>
         </label>
         <label className="block space-y-1.5">

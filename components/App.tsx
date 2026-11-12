@@ -26,6 +26,7 @@ import type { Space, Tool } from "@/lib/types";
 import { normalizeSpace, normalizeTool } from "@/lib/validate";
 import { AgentBar } from "./AgentBar";
 import { SettingsDialog, ShareDialog, TemplatesDialog } from "./Dialogs";
+import { usePublik } from "./PublikGate";
 import { ToolCard } from "./ToolCard";
 import { Avatar, btnAccent, btnGhost, btnOutline, miniInput } from "./ui";
 
@@ -49,7 +50,8 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyText, setBusyText] = useState("");
-  const [error, setError] = useState("");
+  const [error, setErrorState] = useState<{ text: string; topUpUrl?: string }>({ text: "" });
+  const setError = (text: string, topUpUrl?: string) => setErrorState({ text, topUpUrl });
   const [target, setTarget] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -58,6 +60,10 @@ export default function App() {
   const [memberDraft, setMemberDraft] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Chosen at Sign in with publik ("Connect your plan"), changeable in settings: AI then runs on publik API.
+  const publik = usePublik();
+  const viaPublik = publik.choice === "publik";
+  const aiOn = viaPublik || !!apiKey;
 
   const showToast = useCallback((t: Toast) => {
     setToast(t);
@@ -170,23 +176,23 @@ export default function App() {
     setError("");
     const current = target ? space.tools.find((t) => t.id === target) : undefined;
 
-    if (!apiKey) {
+    if (!aiOn) {
       if (current) {
-        setError("Changing a tool with a sentence needs an Anthropic key. Add one in settings, or edit the tool directly.");
+        setError("Changing a tool with a sentence needs AI: use your publik plan or add an Anthropic key in settings, or edit the tool directly.");
         return;
       }
       const tpl = matchTemplate(text);
       if (!tpl) {
         setError(
-          "No starter matches that. Try words like poll, split, bracket, seating, itinerary or checklist, or add a key for custom tools.",
+          "No starter matches that. Try words like poll, split, bracket, seating, itinerary or checklist, or turn on AI in settings for custom tools.",
         );
         return;
       }
       addFromTemplate(tpl, text);
       setPrompt("");
       showToast({
-        text: `Added the “${tpl.name}” starter. Add a key for custom tools.`,
-        action: { label: "Add key", run: () => setModal("settings") },
+        text: `Added the “${tpl.name}” starter. Turn on AI in settings for custom tools.`,
+        action: { label: "Settings", run: () => setModal("settings") },
       });
       return;
     }
@@ -196,7 +202,8 @@ export default function App() {
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-anthropic-key": apiKey },
+        // With publik, the server uses this browser's publik key (sealed cookie); the own key is not sent.
+        headers: { "content-type": "application/json", ...(viaPublik ? {} : { "x-anthropic-key": apiKey }) },
         body: JSON.stringify({
           prompt: text,
           model,
@@ -204,9 +211,11 @@ export default function App() {
           current,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { tool?: unknown; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { tool?: unknown; error?: string; topUpUrl?: string };
       if (!res.ok || !data.tool) {
-        setError(data.error ?? `Something went wrong (${res.status}).`);
+        // 402 from publik API: its message plus exactly one link, the top-up page.
+        const topUp = res.status === 402 && data.topUpUrl?.startsWith("https://") ? data.topUpUrl : undefined;
+        setError(data.error ?? `Something went wrong (${res.status}).`, topUp);
         return;
       }
       const tool = normalizeTool(data.tool);
@@ -413,9 +422,10 @@ export default function App() {
               onChange={setPrompt}
               onSubmit={ask}
               busy={busy}
-              hasKey={!!apiKey}
-              model={model}
-              error={error}
+              hasKey={aiOn}
+              model={viaPublik ? "publik API" : model}
+              error={error.text}
+              topUpUrl={error.topUpUrl}
               targetTitle={targetTool?.title ?? null}
               onClearTarget={() => setTarget(null)}
               onOpenSettings={() => setModal("settings")}
@@ -592,7 +602,15 @@ export default function App() {
             write(KEYS.model, m && m !== DEFAULT_MODEL ? m : null);
             setModal(null);
             setError("");
-            showToast({ text: k ? "Key saved in this browser. Ask for anything." : "Key removed. Back to demo mode." });
+            showToast({
+              text: k
+                ? viaPublik
+                  ? "Key saved in this browser. AI uses your publik plan until you pick My own key."
+                  : "Key saved in this browser. Ask for anything."
+                : viaPublik
+                  ? "Key removed. AI still uses your publik plan."
+                  : "Key removed. Back to demo mode.",
+            });
           }}
           onClose={() => setModal(null)}
         />

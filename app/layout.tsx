@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/bricolage-grotesque";
 import "./globals.css";
+import { PublikGate } from "@/components/PublikGate";
 
 export const metadata: Metadata = {
   title: "Potluck: a shared planning space your group builds with AI",
@@ -27,7 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <PublikGate appName="Potluck">{children}</PublikGate>
+      </body>
     </html>
   );
 }

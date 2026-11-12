@@ -1,10 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { cookies } from "next/headers";
+import { MODELS, publikChat, resolveProvider } from "@/lib/publik";
 import { SYSTEM_PROMPT } from "@/lib/prompt";
 import { extractJson, normalizeTool } from "@/lib/validate";
 
 /*
- * Bring-your-own-key proxy. The key arrives in a request header, is used for
- * this one call, and is never stored or logged. Nothing here writes to disk.
+ * Two providers, picked by resolveProvider() from the person's choice at Sign in with publik:
+ * - publik API (they chose "Connect your plan"): this browser's own publik install key, read from its
+ *   sealed http-only cookie on the server, with a tier model. The key never reaches the browser.
+ * - their own Anthropic key: it arrives in a request header, is used for this one call, and is never
+ *   stored or logged. Nothing here writes to disk.
  */
 
 export const runtime = "nodejs";
@@ -27,8 +32,10 @@ function json(data: unknown, status = 200) {
 }
 
 export async function POST(req: Request) {
-  const apiKey = req.headers.get("x-anthropic-key")?.trim();
-  if (!apiKey) return json({ error: "Add your Anthropic API key in settings to build custom tools." }, 401);
+  const ownKey = req.headers.get("x-anthropic-key")?.trim();
+  const provider = resolveProvider(await cookies(), ownKey ? { baseURL: "https://api.anthropic.com", apiKey: ownKey } : null);
+  if (provider.kind === "needs_own_key")
+    return json({ error: "Add your Anthropic API key in settings, or switch to your publik plan, to build custom tools." }, 401);
 
   let body: Body;
   try {
@@ -62,7 +69,20 @@ export async function POST(req: Request) {
     }
   }
 
-  const client = new Anthropic({ apiKey, maxRetries: 1, timeout: 90_000 });
+  const user = `${context}\n\nREQUEST: ${prompt}`;
+
+  if (provider.kind === "publik") {
+    const r = await publikChat(
+      provider,
+      { model: MODELS.balanced, max_tokens: 4000, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: user }] },
+      req.signal,
+    );
+    // A 402 carries publik's message and exactly one link, its top_up_url.
+    if (!r.ok) return json({ error: r.message, ...(r.topUpUrl ? { topUpUrl: r.topUpUrl } : {}) }, r.status);
+    return toolFrom(r.text, prompt);
+  }
+
+  const client = new Anthropic({ apiKey: provider.apiKey, maxRetries: 1, timeout: 90_000 });
 
   try {
     const useFallbacks = FALLBACK_MODELS.has(model);
@@ -72,7 +92,7 @@ export async function POST(req: Request) {
       system: SYSTEM_PROMPT,
       output_config: { effort: "low" },
       ...(useFallbacks ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-      messages: [{ role: "user", content: `${context}\n\nREQUEST: ${prompt}` }],
+      messages: [{ role: "user", content: user }],
     });
 
     if (response.stop_reason === "refusal") {
@@ -80,14 +100,7 @@ export async function POST(req: Request) {
     }
     let text = "";
     for (const block of response.content) if (block.type === "text") text += block.text;
-
-    let tool;
-    try {
-      tool = normalizeTool(extractJson(text));
-    } catch (e) {
-      return json({ error: `The agent's answer didn't fit a tool (${(e as Error).message}). Try again.` }, 422);
-    }
-    return json({ tool: { ...tool, prompt: prompt.slice(0, 200) } });
+    return toolFrom(text, prompt);
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) return json({ error: "That API key was rejected." }, 401);
     if (error instanceof Anthropic.PermissionDeniedError)
@@ -100,4 +113,14 @@ export async function POST(req: Request) {
       return json({ error: `Anthropic API error (${error.status ?? "network"}). Try again.` }, 502);
     return json({ error: "Couldn't reach the model. Try again." }, 502);
   }
+}
+
+function toolFrom(text: string, prompt: string) {
+  let tool;
+  try {
+    tool = normalizeTool(extractJson(text));
+  } catch (e) {
+    return json({ error: `The agent's answer didn't fit a tool (${(e as Error).message}). Try again.` }, 422);
+  }
+  return json({ tool: { ...tool, prompt: prompt.slice(0, 200) } });
 }

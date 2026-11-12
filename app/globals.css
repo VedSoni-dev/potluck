@@ -38,6 +38,19 @@
   color-scheme: dark;
 }
 
+/* Sign in with publik (components/PublikGate.tsx) in potluck's colours */
+:root {
+  --publik-bg: var(--bg);
+  --publik-card: var(--card);
+  --publik-ink: var(--ink);
+  --publik-muted: var(--muted);
+  --publik-line: var(--line);
+  --publik-accent: var(--accent);
+  --publik-accent-ink: var(--accent-ink);
+  --publik-hover: var(--bg-2);
+  --publik-display-font: "Bricolage Grotesque Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-bg-2: var(--bg-2);

@@ -19,6 +19,7 @@ export function AgentBar({
   hasKey,
   model,
   error,
+  topUpUrl,
   targetTitle,
   onClearTarget,
   onOpenSettings,
@@ -31,6 +32,8 @@ export function AgentBar({
   hasKey: boolean;
   model: string;
   error: string;
+  /** publik API 402: the one link next to its message. */
+  topUpUrl?: string;
   targetTitle: string | null;
   onClearTarget: () => void;
   onOpenSettings: () => void;
@@ -86,6 +89,14 @@ export function AgentBar({
       {error && (
         <p className="rounded-xl border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad" role="alert">
           {error}
+          {topUpUrl && (
+            <>
+              {" "}
+              <a href={topUpUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
+                Top up on publik
+              </a>
+            </>
+          )}
         </p>
       )}
 
@@ -102,7 +113,7 @@ export function AgentBar({
             onClick={onOpenSettings}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line-2 bg-card px-2.5 py-1 text-xs font-medium text-ink-2 hover:border-accent"
           >
-            <KeyRound size={12} /> Demo mode: matches starters · add a key for custom tools
+            <KeyRound size={12} /> Demo mode: matches starters · turn on AI for custom tools
           </button>
         )}
         <button
