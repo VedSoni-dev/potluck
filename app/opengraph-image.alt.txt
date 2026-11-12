@@ -1,0 +1,1 @@
+potluck: a shared planning space where your group asks an AI to build polls, expense splits, brackets and seating charts
