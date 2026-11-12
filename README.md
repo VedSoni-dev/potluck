@@ -1,8 +1,24 @@
 # Potluck
 
+![potluck: your group asks, an AI builds the tool](docs/media/cover.png)
+
 A shared space where your group drops links and notes, then asks an AI to build the planning tools you need: polls, itineraries, expense splits, brackets, drag-and-drop seating charts. A free, open-source alternative to Google Tabletop.
 
 Open it, **Sign in with publik**, and you land in a sample space ("Tahoe ski weekend", 6 friends) where every tool already works: vote, split, advance the bracket, drag name badges between rooms. No API key needed.
+
+
+## See it
+
+![Drag friends into rooms](docs/media/drag.gif)
+
+| | |
+|---|---|
+| ![The sample space](docs/media/01-sample-space.png) | ![One sentence, one tool](docs/media/02-one-sentence-one-tool.png) |
+| ![Drag-and-drop seating chart](docs/media/03-seating-drag.png) | ![Vote in one tap](docs/media/04-vote.png) |
+
+Screenshots are from the real app with its built-in sample space ("Tahoe ski weekend").
+
+**Links:** [publik listing](https://publikhq.com/potluck) · [live app](https://potluck-blue.vercel.app) · [landing page](https://vedsoni-dev.github.io/potluck/)
 
 ## What works
 
