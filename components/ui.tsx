@@ -79,3 +79,16 @@ export const field =
   "w-full rounded-xl border border-line bg-card px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
 export const miniInput =
   "min-w-0 flex-1 rounded-lg border border-transparent bg-bg-2/70 px-2.5 py-1.5 text-sm outline-none placeholder:text-muted focus:border-line-2 focus:bg-card";
+
+export function Logo() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
+      <rect width="32" height="32" rx="9" className="fill-ink" />
+      <circle cx="16" cy="17" r="8.5" fill="none" className="stroke-bg" strokeWidth="2.4" />
+      <circle cx="16" cy="17" r="2.6" className="fill-accent" />
+      <circle cx="11" cy="7.5" r="2" className="fill-bg" />
+      <circle cx="16" cy="6" r="2" className="fill-accent" />
+      <circle cx="21" cy="7.5" r="2" className="fill-bg" />
+    </svg>
+  );
+}

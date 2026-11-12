@@ -6,7 +6,7 @@ import { SHARE_PARAM, encodeSpace } from "@/lib/share";
 import { DEFAULT_MODEL } from "@/lib/store";
 import { TEMPLATES, type Template } from "@/lib/templates";
 import type { Space } from "@/lib/types";
-import { PublikChoice } from "./PublikGate";
+import { PublikChoice, usePublik } from "./PublikGate";
 import { TOOL_HUE, TOOL_ICON } from "./ToolCard";
 import { Modal, btnGhost, btnPrimary, field } from "./ui";
 
@@ -24,6 +24,9 @@ export function SettingsDialog({
   const [k, setK] = useState(apiKey);
   const [m, setM] = useState(model);
   const [show, setShow] = useState(false);
+  // The choice made at Sign in with publik; <PublikChoice /> below changes it.
+  const { ready, usesAi, choice } = usePublik();
+  const viaPublik = choice === "publik";
   return (
     <Modal title="Agent settings" onClose={onClose}>
       <form
@@ -33,9 +36,15 @@ export function SettingsDialog({
           onSave(k.trim(), m.trim());
         }}
       >
-        <PublikChoice />
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Anthropic API key</span>
+        {ready && usesAi && (
+          <div className="rounded-xl border border-line bg-bg-2/40 p-3">
+            <PublikChoice />
+          </div>
+        )}
+        <label className={`block space-y-1.5 ${viaPublik ? "opacity-75" : ""}`}>
+          <span className="text-sm font-medium">
+            Anthropic API key {viaPublik && <span className="font-normal text-muted">(used only with My own key)</span>}
+          </span>
           <div className="relative">
             <input
               type={show ? "text" : "password"}
@@ -56,13 +65,18 @@ export function SettingsDialog({
             </button>
           </div>
           <span className="block text-xs leading-relaxed text-muted">
-            Used when you pick My own key. Stored only in this browser (localStorage). Each request sends it to this
-            app&apos;s <code>/api/agent</code> route, which forwards it to Anthropic for that one call. It is never saved
-            or logged on the server. Without a key or a publik plan, requests match the starter templates.
+            {viaPublik
+              ? "Your publik plan pays for AI right now, so no key is needed. "
+              : "With My own key, @potluck needs this to build custom tools. "}
+            Stored only in this browser (localStorage). Each request sends it to this app&apos;s <code>/api/agent</code>{" "}
+            route, which forwards it to Anthropic for that one call. It is never saved or logged on the server. With no
+            AI turned on, requests match the starter templates.
           </span>
         </label>
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Model</span>
+          <span className="text-sm font-medium">
+            Model <span className="font-normal text-muted">({viaPublik ? "your key only; publik plan uses publik-balanced" : "your key"})</span>
+          </span>
           <input value={m} onChange={(e) => setM(e.target.value)} placeholder={DEFAULT_MODEL} className={`${field} font-mono`} spellCheck={false} />
         </label>
         <div className="flex items-center justify-between gap-2 pt-1">

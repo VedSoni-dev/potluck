@@ -1,11 +1,14 @@
 import type { Space } from "./types";
 
+/** The sample plan's id. A space with this id is the example: it is shown, never saved as someone's plan. */
+export const SAMPLE_ID = "demo-ski-trip";
+
 /* Fixed ids so the server render and the first client render match. */
 export function demoSpace(): Space {
   const people = ["Maya", "Dev", "Priya", "Sam", "Jonah", "Lena"];
   return {
     v: 1,
-    id: "demo-ski-trip",
+    id: SAMPLE_ID,
     title: "Tahoe ski weekend",
     subtitle: "Fri Jan 16 – Mon Jan 19 · 6 friends · a cabin near Truckee",
     members: [

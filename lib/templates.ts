@@ -9,8 +9,9 @@ export type Template = {
   make: (people: string[], prompt?: string) => Tool;
 };
 
-const fallbackPeople = ["Alex", "Bea", "Cam", "Dana"];
-const crew = (people: string[]) => (people.length >= 2 ? people : fallbackPeople);
+/** The group, or (in a plan that has only you so far) you plus placeholders to rename. */
+const crew = (people: string[]) =>
+  people.length >= 2 ? people : [people[0] ?? "You", "Friend 2", "Friend 3", "Friend 4"];
 
 function numberNear(prompt: string | undefined, words: RegExp): number | undefined {
   if (!prompt) return undefined;
@@ -161,11 +162,11 @@ export const TEMPLATES: Template[] = [
       const tablesN = Math.min(12, numberNear(prompt, /tables?|rooms?|cars?/) ?? 3);
       const ofN = prompt?.match(/of\s*(\d{1,2})/i);
       const seats = Math.min(24, Math.max(1, ofN ? parseInt(ofN[1], 10) : 4));
-      const tables = Array.from({ length: tablesN }, (_, i) => ({ id: uid(), name: `Table ${i + 1}`, seats }));
-      const guests = (people.length ? people : ["Alex", "Bea", "Cam", "Dana", "Eli", "Fran", "Gus", "Hana"]).map(
-        (name) => ({ id: uid(), name, tableId: null }),
-      );
-      return { id: uid(), type: "seating", title: "Seating chart", tables, guests };
+      const unit = /rooms?|sleep|beds?/i.test(prompt ?? "") ? "Room" : /cars?\b/i.test(prompt ?? "") ? "Car" : "Table";
+      const tables = Array.from({ length: tablesN }, (_, i) => ({ id: uid(), name: `${unit} ${i + 1}`, seats }));
+      const guests = crew(people).map((name) => ({ id: uid(), name, tableId: null }));
+      const title = unit === "Room" ? "Who sleeps where" : unit === "Car" ? "Who rides with whom" : "Seating chart";
+      return { id: uid(), type: "seating", title, tables, guests };
     },
   },
   {

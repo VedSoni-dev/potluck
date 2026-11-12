@@ -4,7 +4,7 @@
 
 A shared space where your group drops links and notes, then asks an AI to build the planning tools you need: polls, itineraries, expense splits, brackets, drag-and-drop seating charts. A free, open-source alternative to Google Tabletop.
 
-Open it, **Sign in with publik**, and you land in a sample space ("Tahoe ski weekend", 6 friends) where every tool already works: vote, split, advance the bracket, drag name badges between rooms. No API key needed.
+Open it, **Sign in with publik**, name your plan ("Lisbon in May") and add your people, and you're in your own space. A short guide in the plan shows the three moves: ask @potluck for a tool (example asks written with your people's names), use it right where it lands, share the link with the group. Want to see a finished one first? "or look at an example first" opens a clearly labelled sample plan ("Tahoe ski weekend", 6 friends) where every tool already works; it is never saved over your plan.
 
 
 ## See it
@@ -22,6 +22,7 @@ Screenshots are from the real app with its built-in sample space ("Tahoe ski wee
 
 ## What works
 
+- **Your own plan from the first screen**: name it, optional details, add the people (you first). It saves in your browser; next time you go straight back to it. "New plan" in the ⋯ menu starts another.
 - **A space for the group**: editable title and details, a people list (tap a name to act as them), and a board of links and notes.
 - **Six real tools**, all editable in place:
   - **Poll**: one tap to vote, live bars, voter avatars, leader marked, add options.
@@ -31,7 +32,7 @@ Screenshots are from the real app with its built-in sample space ("Tahoe ski wee
   - **Itinerary**: days with timed stops; add or remove stops and days.
   - **Checklist**: who-brings-what with an owner per item and a progress bar.
 - **Ask the agent** (`@potluck build us a…`): on your publik plan, or with your own Anthropic key, it turns one sentence into a tool, pre-filled using your group's names and board notes. Click the sparkle on any tool to change it with a sentence ("add a vegetarian option", "make it 4 tables of 6"). Every answer is validated and repaired before it renders.
-- **Demo mode without AI**: requests match one of 8 starter templates (with light parsing, e.g. "a poll for friday's hike: easy, ridge or summit" gives you those three options) and tell you AI unlocks custom tools.
+- **Starters when AI is off**: if you picked "Use my own key" and have not added one yet, requests match one of 8 starter templates (with light parsing, e.g. "a poll for friday's hike: easy, ridge or summit" gives you those three options), and the bar says how to turn AI on. Settings shows the choice you made at sign-in and lets you change it.
 - **Share by link**: the whole space is compressed into the URL after the `#`, so it never touches a server. Friends open the same space and can vote, split and drag.
 - Saved in your browser (localStorage), JSON export/import, light and dark mode, works at phone width.
 
@@ -61,7 +62,7 @@ npm start
 
 Then open http://localhost:3000. For development, `npm run dev`.
 
-The publik app token is read from `publik-app-token.txt` in this folder (public by design: it only mints capped keys for this app) or `PUBLIK_APP_TOKEN`. Without one, the sign-in screen says so. To check the publik wiring of a built app: `PUBLIK_SELF_TEST=1 npm start` prints `publik self-test: ok potluck 0.1.0` and exits.
+The publik app token is read from `publik-app-token.txt` in this folder (public by design: it only mints capped keys for this app) or `PUBLIK_APP_TOKEN`. Without one, the sign-in screen says so. To check the publik wiring of a built app: `PUBLIK_SELF_TEST=1 npm start` prints `publik self-test: ok potluck 0.3.0` and exits.
 
 ## Deploy
 

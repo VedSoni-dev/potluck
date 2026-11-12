@@ -1,13 +1,15 @@
 "use client";
 
 import {
+  ArrowRight,
+  CircleHelp,
   Download,
   Ellipsis,
+  Eye,
   FilePlus2,
   Link2,
   LayoutTemplate,
   Moon,
-  RotateCcw,
   Settings,
   Share2,
   StickyNote,
@@ -15,22 +17,35 @@ import {
   Trash2,
   Upload,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { demoSpace } from "@/lib/demo";
+import { aiStatus, examplePrompts, type AiStatus } from "@/lib/ai";
+import { SAMPLE_ID, demoSpace } from "@/lib/demo";
 import { MEMBER_COLORS, colorFor, uid } from "@/lib/id";
 import { SHARE_PARAM, decodeSpace } from "@/lib/share";
 import { DEFAULT_MODEL, KEYS, read, write } from "@/lib/store";
 import { TEMPLATES, matchTemplate, type Template } from "@/lib/templates";
 import type { Space, Tool } from "@/lib/types";
 import { normalizeSpace, normalizeTool } from "@/lib/validate";
-import { AgentBar } from "./AgentBar";
+import { AGENT_INPUT_ID, AgentBar } from "./AgentBar";
 import { SettingsDialog, ShareDialog, TemplatesDialog } from "./Dialogs";
+import { GUIDE_START, GuideCard, type GuideState } from "./GuideCard";
+import { Onboarding, type NewPlan } from "./Onboarding";
 import { usePublik } from "./PublikGate";
 import { ToolCard } from "./ToolCard";
-import { Avatar, btnAccent, btnGhost, btnOutline, miniInput } from "./ui";
+import { Avatar, Logo, btnAccent, btnGhost, btnOutline, miniInput } from "./ui";
 
 type Toast = { text: string; action?: { label: string; run: () => void } };
+
+/** Asks shown under the bar in the sample plan. */
+const SAMPLE_SUGGESTIONS = [
+  "a poll for friday's hike: easy, medium or summit",
+  "split $340 for the cabin hot tub between everyone",
+  "seating chart for 3 tables of 6",
+  "bracket for 8 teams",
+  "chore rota for the week",
+];
 
 function hashColor(name: string) {
   let h = 0;
@@ -38,12 +53,218 @@ function hashColor(name: string) {
   return MEMBER_COLORS[Math.abs(h) % MEMBER_COLORS.length];
 }
 
+/** The plan saved on this device, if it is really theirs. */
+function readOwn(): Space | null {
+  const raw = read(KEYS.space);
+  if (!raw) return null;
+  try {
+    const s = normalizeSpace(JSON.parse(raw));
+    if (s.id !== SAMPLE_ID) return s;
+    // Before 0.3 everyone landed in the sample and it was saved as their space. Keep it only if they made it
+    // theirs (renamed it); otherwise this person has no plan yet and gets the start screen.
+    return s.title !== demoSpace().title ? { ...s, id: uid() } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The software behind Sign in with publik. First run (no plan on this device) shows the start screen;
+ * the sample plan is something you look at, never your saved plan.
+ */
 export default function App() {
-  const [space, setSpace] = useState<Space>(demoSpace);
-  const [me, setMe] = useState("Maya");
-  const [loaded, setLoaded] = useState(false);
+  const publik = usePublik();
+  const [screen, setScreen] = useState<"loading" | "start" | "space">("loading");
+  const [space, setSpace] = useState<Space | null>(null);
+  const [own, setOwn] = useState<{ title: string } | null>(null);
+  const [me, setMe] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const [banner, setBanner] = useState("");
+  const [notice, setNotice] = useState("");
+  const [guide, setGuide] = useState<GuideState>(GUIDE_START);
+
+  const ai = aiStatus(publik.choice, apiKey, model);
+  const isSample = space?.id === SAMPLE_ID;
+
+  const openSpace = useCallback((s: Space) => {
+    const storedMe = read(KEYS.me);
+    const names = s.members.map((m) => m.name);
+    setSpace(s);
+    setMe(s.id === SAMPLE_ID ? "Maya" : storedMe && names.includes(storedMe) ? storedMe : (names[0] ?? "You"));
+    setScreen("space");
+  }, []);
+
+  /* ---------- load ---------- */
+  useEffect(() => {
+    setApiKey(read(KEYS.apiKey) ?? "");
+    setModel(read(KEYS.model) || DEFAULT_MODEL);
+    try {
+      const g = JSON.parse(read(KEYS.guide) ?? "null") as Partial<GuideState> | null;
+      if (g && typeof g === "object") setGuide({ hidden: !!g.hidden, touched: !!g.touched, shared: !!g.shared });
+    } catch {
+      /* default guide */
+    }
+    const mine = readOwn();
+    setOwn(mine ? { title: mine.title } : null);
+
+    (async () => {
+      const hash = window.location.hash.slice(1);
+      if (hash.startsWith(SHARE_PARAM)) {
+        try {
+          const s = await decodeSpace(hash.slice(SHARE_PARAM.length));
+          openSpace(s);
+          setBanner(`You opened a shared copy of “${s.title}”. Your edits stay on this device. Hit Share to send your version back.`);
+        } catch {
+          if (mine) {
+            openSpace(mine);
+            setBanner("That share link looks broken or cut off, so you're seeing your own plan instead.");
+          } else {
+            setNotice("That share link looks broken or cut off. Ask for a fresh one, or start your own plan.");
+            setScreen("start");
+          }
+        }
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } else if (mine) {
+        openSpace(mine);
+      } else {
+        setScreen("start");
+      }
+    })();
+  }, [openSpace]);
+
+  /* ---------- save (the sample is never saved) ---------- */
+  useEffect(() => {
+    if (!space || space.id === SAMPLE_ID) return;
+    write(KEYS.space, JSON.stringify(space));
+    setOwn((o) => (o?.title === space.title ? o : { title: space.title }));
+  }, [space]);
+  useEffect(() => {
+    if (me && space && space.id !== SAMPLE_ID) write(KEYS.me, me);
+  }, [me, space]);
+
+  const updateGuide = useCallback((p: Partial<GuideState>) => {
+    setGuide((g) => {
+      const next = { ...g, ...p };
+      write(KEYS.guide, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  function createPlan(p: NewPlan) {
+    const members = [p.you, ...p.others].map((name, i) => ({ id: uid(), name, color: colorFor(i) }));
+    const s: Space = { v: 1, id: uid(), title: p.title, subtitle: p.subtitle, members, pins: [], tools: [] };
+    setSpace(s);
+    setMe(p.you);
+    setNotice("");
+    setBanner("");
+    updateGuide({ touched: false, shared: false });
+    setScreen("space");
+    window.scrollTo({ top: 0 });
+  }
+
+  function openSample() {
+    setBanner("");
+    openSpace(demoSpace());
+    window.scrollTo({ top: 0 });
+  }
+
+  function openOwn() {
+    const mine = readOwn();
+    setBanner("");
+    if (mine) openSpace(mine);
+    else setScreen("start");
+  }
+
+  function startNew() {
+    if (own && !confirm(`Start a new plan? It replaces “${own.title}” on this device. Export it first from the ⋯ menu to keep a copy.`)) return;
+    setScreen("start");
+    window.scrollTo({ top: 0 });
+  }
+
+  if (screen === "loading") return <div className="min-h-screen bg-bg" aria-busy />;
+  if (screen === "start" || !space)
+    return (
+      <Onboarding
+        ai={ai}
+        notice={notice}
+        onCreate={createPlan}
+        onSample={openSample}
+        back={own ? { label: `Back to “${own.title}”`, run: openOwn } : undefined}
+      />
+    );
+
+  return (
+    <Workspace
+      space={space}
+      update={(fn) => setSpace((s) => (s ? fn(s) : s))}
+      replace={(s) => openSpace(s)}
+      me={me}
+      setMe={setMe}
+      ai={ai}
+      viaPublik={publik.choice === "publik"}
+      apiKey={apiKey}
+      model={model}
+      onSaveSettings={(k, m) => {
+        setApiKey(k);
+        setModel(m || DEFAULT_MODEL);
+        write(KEYS.apiKey, k || null);
+        write(KEYS.model, m && m !== DEFAULT_MODEL ? m : null);
+      }}
+      isSample={isSample}
+      ownTitle={own?.title ?? null}
+      onStartNew={startNew}
+      onOpenSample={openSample}
+      onBackToOwn={openOwn}
+      banner={banner}
+      setBanner={setBanner}
+      guide={guide}
+      updateGuide={updateGuide}
+    />
+  );
+}
+
+function Workspace({
+  space,
+  update,
+  replace,
+  me,
+  setMe,
+  ai,
+  viaPublik,
+  apiKey,
+  model,
+  onSaveSettings,
+  isSample,
+  ownTitle,
+  onStartNew,
+  onOpenSample,
+  onBackToOwn,
+  banner,
+  setBanner,
+  guide,
+  updateGuide,
+}: {
+  space: Space;
+  update: (fn: (s: Space) => Space) => void;
+  replace: (s: Space) => void;
+  me: string;
+  setMe: (name: string) => void;
+  ai: AiStatus;
+  viaPublik: boolean;
+  apiKey: string;
+  model: string;
+  onSaveSettings: (key: string, model: string) => void;
+  isSample: boolean;
+  ownTitle: string | null;
+  onStartNew: () => void;
+  onOpenSample: () => void;
+  onBackToOwn: () => void;
+  banner: string;
+  setBanner: (s: string) => void;
+  guide: GuideState;
+  updateGuide: (p: Partial<GuideState>) => void;
+}) {
   const [dark, setDark] = useState(false);
   const [modal, setModal] = useState<null | "settings" | "templates" | "share">(null);
   const [menu, setMenu] = useState(false);
@@ -55,15 +276,10 @@ export default function App() {
   const [target, setTarget] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [banner, setBanner] = useState("");
   const [pinDraft, setPinDraft] = useState("");
   const [memberDraft, setMemberDraft] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Chosen at Sign in with publik ("Connect your plan"), changeable in settings: AI then runs on publik API.
-  const publik = usePublik();
-  const viaPublik = publik.choice === "publik";
-  const aiOn = viaPublik || !!apiKey;
 
   const showToast = useCallback((t: Toast) => {
     setToast(t);
@@ -71,82 +287,42 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 5000);
   }, []);
 
-  /* ---------- load ---------- */
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
-    setApiKey(read(KEYS.apiKey) ?? "");
-    setModel(read(KEYS.model) || DEFAULT_MODEL);
-    const storedMe = read(KEYS.me);
-
-    const adopt = (s: Space) => {
-      setSpace(s);
-      const names = s.members.map((m) => m.name);
-      setMe(storedMe && names.includes(storedMe) ? storedMe : (names[0] ?? "You"));
-    };
-
-    (async () => {
-      const hash = window.location.hash.slice(1);
-      if (hash.startsWith(SHARE_PARAM)) {
-        try {
-          const s = await decodeSpace(hash.slice(SHARE_PARAM.length));
-          adopt(s);
-          setBanner(`You opened a shared copy of “${s.title}”. Your edits stay on this device. Hit Share to send your version back.`);
-        } catch {
-          setBanner("That share link looks broken or cut off, so you're seeing your own space instead.");
-          const raw = read(KEYS.space);
-          if (raw) {
-            try {
-              adopt(normalizeSpace(JSON.parse(raw)));
-            } catch {
-              /* keep demo */
-            }
-          }
-        }
-        history.replaceState(null, "", window.location.pathname + window.location.search);
-      } else {
-        const raw = read(KEYS.space);
-        if (raw) {
-          try {
-            adopt(normalizeSpace(JSON.parse(raw)));
-          } catch {
-            /* corrupted storage: fall back to the demo */
-          }
-        }
-      }
-      setLoaded(true);
-    })();
   }, []);
-
-  /* ---------- save ---------- */
+  // Switching between your plan and the sample: nothing half-done carries over.
   useEffect(() => {
-    if (loaded) write(KEYS.space, JSON.stringify(space));
-  }, [space, loaded]);
-  useEffect(() => {
-    if (loaded) write(KEYS.me, me);
-  }, [me, loaded]);
+    setTarget(null);
+    setErrorState({ text: "" });
+    setPrompt("");
+  }, [space.id]);
 
   const people = useMemo(() => space.members.map((m) => m.name), [space.members]);
   const colorOf = useCallback(
     (name: string) => space.members.find((m) => m.name === name)?.color ?? hashColor(name),
     [space.members],
   );
-  const isDemo = space.id === "demo-ski-trip";
+  const examples = useMemo(() => examplePrompts(people), [people]);
+  const showGuide = !isSample && !guide.hidden;
 
   /* ---------- mutations ---------- */
-  const patch = (p: Partial<Space>) => setSpace((s) => ({ ...s, ...p }));
-  const updateTool = (t: Tool) => setSpace((s) => ({ ...s, tools: s.tools.map((x) => (x.id === t.id ? t : x)) }));
+  const patch = (p: Partial<Space>) => update((s) => ({ ...s, ...p }));
+  const updateTool = (t: Tool) => {
+    update((s) => ({ ...s, tools: s.tools.map((x) => (x.id === t.id ? t : x)) }));
+    if (!isSample && !guide.touched) updateGuide({ touched: true });
+  };
   const removeTool = (id: string) => {
     const idx = space.tools.findIndex((t) => t.id === id);
     const removed = space.tools[idx];
     if (!removed) return;
-    setSpace((s) => ({ ...s, tools: s.tools.filter((t) => t.id !== id) }));
+    update((s) => ({ ...s, tools: s.tools.filter((t) => t.id !== id) }));
     if (target === id) setTarget(null);
     showToast({
       text: `Removed “${removed.title}”.`,
       action: {
         label: "Undo",
         run: () =>
-          setSpace((s) => {
+          update((s) => {
             const tools = [...s.tools];
             tools.splice(Math.min(idx, tools.length), 0, removed);
             return { ...s, tools };
@@ -156,7 +332,7 @@ export default function App() {
   };
 
   function addTool(tool: Tool) {
-    setSpace((s) => ({ ...s, tools: [tool, ...s.tools] }));
+    update((s) => ({ ...s, tools: [tool, ...s.tools] }));
     setFresh(tool.id);
     setTimeout(() => setFresh(null), 2200);
     requestAnimationFrame(() =>
@@ -170,15 +346,34 @@ export default function App() {
     setModal(null);
   }
 
+  /** An example ask goes into the bar, ready to send (or edit first). */
+  function fillPrompt(text: string) {
+    setPrompt(text);
+    setTarget(null);
+    setError("");
+    requestAnimationFrame(() => {
+      const el = document.getElementById(AGENT_INPUT_ID) as HTMLInputElement | null;
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(text.length, text.length);
+    });
+  }
+
+  function openShare() {
+    setModal("share");
+    if (!isSample && !guide.shared) updateGuide({ shared: true });
+  }
+
   async function ask() {
     const text = prompt.trim().replace(/^@potluck\b[:,]?\s*/i, "");
     if (!text) return;
     setError("");
     const current = target ? space.tools.find((t) => t.id === target) : undefined;
 
-    if (!aiOn) {
+    if (!ai.on) {
       if (current) {
-        setError("Changing a tool with a sentence needs AI: use your publik plan or add an Anthropic key in settings, or edit the tool directly.");
+        setError("Changing a tool with a sentence needs AI. Turn it on in settings (your publik plan or your own key), or edit the tool directly.");
         return;
       }
       const tpl = matchTemplate(text);
@@ -191,7 +386,7 @@ export default function App() {
       addFromTemplate(tpl, text);
       setPrompt("");
       showToast({
-        text: `Added the “${tpl.name}” starter. Turn on AI in settings for custom tools.`,
+        text: `Added the “${tpl.name}” starter. Turn on AI in settings for tools built from your exact words.`,
         action: { label: "Settings", run: () => setModal("settings") },
       });
       return;
@@ -221,7 +416,7 @@ export default function App() {
       const tool = normalizeTool(data.tool);
       if (current) {
         const next = { ...tool, id: current.id, by: current.by, prompt: current.prompt } as Tool;
-        updateTool(next);
+        update((s) => ({ ...s, tools: s.tools.map((x) => (x.id === next.id ? next : x)) }));
         setTarget(null);
         setFresh(current.id);
         setTimeout(() => setFresh(null), 2200);
@@ -245,32 +440,6 @@ export default function App() {
     write(KEYS.theme, next ? "dark" : "light");
   }
 
-  function newSpace() {
-    setMenu(false);
-    if (!confirm("Start a new empty space? It replaces the one on this device, so export first if you want to keep it."))
-      return;
-    const name = me || "You";
-    setSpace({
-      v: 1,
-      id: uid(),
-      title: "Untitled space",
-      subtitle: "",
-      members: [{ id: uid(), name, color: colorFor(0) }],
-      pins: [],
-      tools: [],
-    });
-    setMe(name);
-    setTarget(null);
-  }
-
-  function loadDemo() {
-    setMenu(false);
-    if (!isDemo && !confirm("Load the sample space? It replaces the one on this device.")) return;
-    setSpace(demoSpace());
-    setMe("Maya");
-    setTarget(null);
-  }
-
   function exportJson() {
     setMenu(false);
     const blob = new Blob([JSON.stringify(space, null, 2)], { type: "application/json" });
@@ -284,8 +453,7 @@ export default function App() {
   async function importJson(file: File) {
     try {
       const s = normalizeSpace(JSON.parse(await file.text()));
-      setSpace(s);
-      setMe(s.members[0]?.name ?? "You");
+      replace(s.id === SAMPLE_ID ? { ...s, id: uid() } : s);
       showToast({ text: `Imported “${s.title}”.` });
     } catch {
       showToast({ text: "That file isn't a Potluck space." });
@@ -322,10 +490,8 @@ export default function App() {
           </a>
           <span className="hidden h-5 w-px bg-line-2 sm:block" />
           <span className="hidden truncate text-sm text-muted sm:block">{space.title}</span>
-          {isDemo && (
-            <span className="hidden rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-accent md:inline">
-              sample space
-            </span>
+          {isSample && (
+            <span className="rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-accent-ink">sample</span>
           )}
           <div className="ml-auto flex items-center gap-1.5">
             <div className="mr-1 hidden -space-x-1.5 md:flex">
@@ -341,7 +507,7 @@ export default function App() {
             <button onClick={() => setModal("templates")} className={`${btnGhost} max-sm:hidden`}>
               <LayoutTemplate size={16} /> Starters
             </button>
-            <button onClick={() => setModal("share")} className={btnAccent}>
+            <button onClick={openShare} className={btnAccent}>
               <Share2 size={15} /> Share
             </button>
             <button onClick={toggleTheme} className={`${btnGhost} px-2`} aria-label={dark ? "Light mode" : "Dark mode"}>
@@ -357,9 +523,18 @@ export default function App() {
               {menu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
-                  <div className="pop absolute right-0 z-50 mt-1 w-56 rounded-xl border border-line bg-card p-1 shadow-card">
-                    <MenuItem icon={<FilePlus2 size={15} />} label="New empty space" onClick={newSpace} />
-                    <MenuItem icon={<RotateCcw size={15} />} label="Load the sample space" onClick={loadDemo} />
+                  <div className="pop absolute right-0 z-50 mt-1 w-60 rounded-xl border border-line bg-card p-1 shadow-card">
+                    <MenuItem icon={<FilePlus2 size={15} />} label="New plan" onClick={() => { setMenu(false); onStartNew(); }} />
+                    {isSample ? (
+                      ownTitle && <MenuItem icon={<ArrowRight size={15} />} label={`Back to “${ownTitle}”`} onClick={() => { setMenu(false); onBackToOwn(); }} />
+                    ) : (
+                      <>
+                        <MenuItem icon={<Eye size={15} />} label="Look at the sample plan" onClick={() => { setMenu(false); onOpenSample(); }} />
+                        {guide.hidden && (
+                          <MenuItem icon={<CircleHelp size={15} />} label="How potluck works" onClick={() => { setMenu(false); updateGuide({ hidden: false }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                        )}
+                      </>
+                    )}
                     <MenuItem icon={<Download size={15} />} label="Export as JSON" onClick={exportJson} />
                     <MenuItem
                       icon={<Upload size={15} />}
@@ -388,6 +563,26 @@ export default function App() {
         </div>
       </header>
 
+      {isSample && (
+        <div className="border-b border-accent/30 bg-accent-soft px-4 py-2.5 sm:px-6">
+          <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+            <span className="rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-accent-ink">Sample</span>
+            <span className="min-w-0 flex-1 text-ink-2">
+              An example plan to poke at: vote, drag, split, ask @potluck. Nothing you do here is saved.
+            </span>
+            {ownTitle ? (
+              <button onClick={onBackToOwn} className={`${btnAccent} py-1.5`}>
+                Back to “{ownTitle}” <ArrowRight size={15} />
+              </button>
+            ) : (
+              <button onClick={onStartNew} className={`${btnAccent} py-1.5`}>
+                Start my own plan <ArrowRight size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {banner && (
         <div className="border-b border-line bg-accent-soft/60 px-4 py-2 text-center text-sm">
           {banner}{" "}
@@ -405,15 +600,16 @@ export default function App() {
               <input
                 value={space.title}
                 onChange={(e) => patch({ title: e.target.value.slice(0, 80) })}
-                className="w-full rounded-lg bg-transparent font-display text-3xl font-bold tracking-tight outline-none focus:bg-card/70 sm:text-[40px] sm:leading-[1.1]"
-                aria-label="Space name"
+                placeholder="Name your plan"
+                className="w-full rounded-lg bg-transparent font-display text-3xl font-bold tracking-tight outline-none placeholder:text-muted/60 focus:bg-card/70 sm:text-[40px] sm:leading-[1.1]"
+                aria-label="Plan name"
               />
               <input
                 value={space.subtitle}
                 onChange={(e) => patch({ subtitle: e.target.value.slice(0, 140) })}
                 placeholder="Dates, place, who's coming…"
                 className="w-full rounded-lg bg-transparent text-[15px] text-muted outline-none placeholder:text-muted/70 focus:bg-card/70"
-                aria-label="Space details"
+                aria-label="Plan details"
               />
             </div>
 
@@ -422,8 +618,8 @@ export default function App() {
               onChange={setPrompt}
               onSubmit={ask}
               busy={busy}
-              hasKey={aiOn}
-              model={viaPublik ? "publik API" : model}
+              ai={ai}
+              suggestions={showGuide ? [] : isSample ? SAMPLE_SUGGESTIONS : examples}
               error={error.text}
               topUpUrl={error.topUpUrl}
               targetTitle={targetTool?.title ?? null}
@@ -431,6 +627,25 @@ export default function App() {
               onOpenSettings={() => setModal("settings")}
               onOpenTemplates={() => setModal("templates")}
             />
+
+            {showGuide && (
+              <GuideCard
+                title={space.title}
+                examples={examples}
+                ai={ai}
+                hasTools={space.tools.length > 0}
+                onlyYou={space.members.length < 2}
+                state={guide}
+                onExample={fillPrompt}
+                onStarters={() => setModal("templates")}
+                onShare={openShare}
+                onSettings={() => setModal("settings")}
+                onHide={() => {
+                  updateGuide({ hidden: true });
+                  showToast({ text: "Guide hidden. Bring it back from the ⋯ menu: How potluck works." });
+                }}
+              />
+            )}
 
             <div className="grid grid-flow-dense grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               {busy && !target && (
@@ -467,7 +682,7 @@ export default function App() {
                 <div className="rounded-2xl border border-dashed border-line-2 bg-card/60 p-8 text-center md:col-span-2 xl:col-span-3">
                   <h3 className="font-display text-xl font-semibold">Nothing on the table yet</h3>
                   <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-                    Ask @potluck for a tool above, or start from one of these.
+                    Tools you ask @potluck for land here, live for the whole group. Or drop in a starter and edit it in place:
                   </p>
                   <div className="mt-4 flex flex-wrap justify-center gap-2">
                     {TEMPLATES.slice(0, 6).map((t) => (
@@ -515,6 +730,12 @@ export default function App() {
                   </li>
                 ))}
               </ul>
+              {space.members.length < 2 && (
+                <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-bg-2/70 px-2 py-1.5 text-xs leading-snug text-ink-2">
+                  <Users size={13} className="mt-px shrink-0 text-muted" />
+                  Just you so far. Add who&apos;s coming and every tool fills in their names.
+                </p>
+              )}
               <form
                 className="mt-2 flex gap-1.5"
                 onSubmit={(e) => {
@@ -554,7 +775,11 @@ export default function App() {
                     </button>
                   </li>
                 ))}
-                {space.pins.length === 0 && <li className="text-sm text-muted">Paste links, addresses, ideas. The agent reads these too.</li>}
+                {space.pins.length === 0 && (
+                  <li className="text-sm leading-snug text-muted">
+                    Nothing pinned yet. Paste the Airbnb link, an address, a budget note: @potluck reads these when it builds.
+                  </li>
+                )}
               </ul>
               <form
                 className="mt-2 flex gap-1.5"
@@ -571,11 +796,11 @@ export default function App() {
       </main>
 
       <footer className="border-t border-line px-4 py-4 text-center text-xs text-muted">
-        potluck · free & open source (MIT) · not affiliated with Google Tabletop · your space lives in this browser
+        potluck · free & open source (MIT) · not affiliated with Google Tabletop · your plan lives in this browser
       </footer>
 
       {toast && (
-        <div className="pop fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-ink px-4 py-2.5 text-sm text-bg shadow-xl">
+        <div className="pop fixed bottom-5 left-1/2 z-50 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-xl bg-ink px-4 py-2.5 text-sm text-bg shadow-xl">
           <span>{toast.text}</span>
           {toast.action && (
             <button
@@ -583,7 +808,7 @@ export default function App() {
                 toast.action!.run();
                 setToast(null);
               }}
-              className="font-semibold text-accent-soft underline underline-offset-2"
+              className="shrink-0 font-semibold text-accent-soft underline underline-offset-2"
             >
               {toast.action.label}
             </button>
@@ -596,20 +821,17 @@ export default function App() {
           apiKey={apiKey}
           model={model}
           onSave={(k, m) => {
-            setApiKey(k);
-            setModel(m || DEFAULT_MODEL);
-            write(KEYS.apiKey, k || null);
-            write(KEYS.model, m && m !== DEFAULT_MODEL ? m : null);
+            onSaveSettings(k, m);
             setModal(null);
             setError("");
             showToast({
               text: k
                 ? viaPublik
-                  ? "Key saved in this browser. AI uses your publik plan until you pick My own key."
-                  : "Key saved in this browser. Ask for anything."
+                  ? "Key saved in this browser. AI uses your publik plan until you switch to My own key."
+                  : "Key saved in this browser. AI is on: ask for anything."
                 : viaPublik
                   ? "Key removed. AI still uses your publik plan."
-                  : "Key removed. Back to demo mode.",
+                  : "Key removed. AI is off: asks match starters until you add a key or switch to your publik plan.",
             });
           }}
           onClose={() => setModal(null)}
@@ -624,21 +846,8 @@ export default function App() {
 function MenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-bg-2">
-      <span className="text-muted">{icon}</span>
-      {label}
+      <span className="shrink-0 text-muted">{icon}</span>
+      <span className="truncate">{label}</span>
     </button>
-  );
-}
-
-function Logo() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="9" className="fill-ink" />
-      <circle cx="16" cy="17" r="8.5" fill="none" className="stroke-bg" strokeWidth="2.4" />
-      <circle cx="16" cy="17" r="2.6" className="fill-accent" />
-      <circle cx="11" cy="7.5" r="2" className="fill-bg" />
-      <circle cx="16" cy="6" r="2" className="fill-accent" />
-      <circle cx="21" cy="7.5" r="2" className="fill-bg" />
-    </svg>
   );
 }

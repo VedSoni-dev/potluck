@@ -2,22 +2,17 @@
 
 import { ArrowUp, KeyRound, LoaderCircle, Sparkles, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import type { AiStatus } from "@/lib/ai";
 
-const SUGGESTIONS = [
-  "a poll for friday's hike: easy, medium or summit",
-  "split $340 for the cabin hot tub between everyone",
-  "seating chart for 3 tables of 6",
-  "bracket for 8 teams",
-  "chore rota for the week",
-];
+export const AGENT_INPUT_ID = "agent-input";
 
 export function AgentBar({
   value,
   onChange,
   onSubmit,
   busy,
-  hasKey,
-  model,
+  ai,
+  suggestions,
   error,
   topUpUrl,
   targetTitle,
@@ -29,8 +24,9 @@ export function AgentBar({
   onChange: (v: string) => void;
   onSubmit: () => void;
   busy: boolean;
-  hasKey: boolean;
-  model: string;
+  ai: AiStatus;
+  /** example asks under the bar (filled in, not sent) */
+  suggestions: string[];
   error: string;
   /** publik API 402: the one link next to its message. */
   topUpUrl?: string;
@@ -67,6 +63,7 @@ export function AgentBar({
         )}
         <input
           ref={ref}
+          id={AGENT_INPUT_ID}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={
@@ -101,19 +98,20 @@ export function AgentBar({
       )}
 
       <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto">
-        {hasKey ? (
+        {ai.on ? (
           <button
             onClick={onOpenSettings}
+            title="Change how AI is paid for"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-good/30 bg-good/10 px-2.5 py-1 text-xs font-medium text-good"
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-good" /> Custom tools on · {model}
+            <span className="h-1.5 w-1.5 rounded-full bg-good" /> {ai.label}
           </button>
         ) : (
           <button
             onClick={onOpenSettings}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line-2 bg-card px-2.5 py-1 text-xs font-medium text-ink-2 hover:border-accent"
           >
-            <KeyRound size={12} /> Demo mode: matches starters · turn on AI for custom tools
+            <KeyRound size={12} /> {ai.label}
           </button>
         )}
         <button
@@ -122,8 +120,8 @@ export function AgentBar({
         >
           Browse starters
         </button>
-        <span className="mx-0.5 h-3 w-px shrink-0 bg-line-2" />
-        {SUGGESTIONS.map((s) => (
+        {suggestions.length > 0 && <span className="mx-0.5 h-3 w-px shrink-0 bg-line-2" />}
+        {suggestions.map((s) => (
           <button
             key={s}
             onClick={() => {

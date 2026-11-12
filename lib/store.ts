@@ -6,6 +6,8 @@ export const KEYS = {
   apiKey: "potluck:anthropic-key",
   model: "potluck:model",
   theme: "potluck:theme",
+  /** the how-to card in a new plan: {"hidden":bool,"touched":bool,"shared":bool} */
+  guide: "potluck:guide",
 } as const;
 
 export function read(key: string): string | null {
