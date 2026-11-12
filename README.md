@@ -13,10 +13,10 @@ Open it, **Sign in with publik**, name your plan ("Lisbon in May") and add your 
 
 | | |
 |---|---|
-| ![The sample space](docs/media/01-sample-space.png) | ![One sentence, one tool](docs/media/02-one-sentence-one-tool.png) |
-| ![Drag-and-drop seating chart](docs/media/03-seating-drag.png) | ![Vote in one tap](docs/media/04-vote.png) |
+| ![Start your plan: name it, add your people](docs/media/01-start-your-plan.png) | ![Your new plan, with the three-step guide](docs/media/02-your-plan.png) |
+| ![Drag-and-drop seating chart (the example plan)](docs/media/03-seating-drag.png) | ![Vote in one tap (the example plan)](docs/media/04-vote.png) |
 
-Screenshots are from the real app with its built-in sample space ("Tahoe ski weekend").
+Screenshots are from the real app. The first two are what you see after Sign in with publik: "Start your plan", then your own plan ("Friendsgiving at Ana's"). The GIF, the seating chart and the poll are from the built-in example ("Tahoe ski weekend", behind "or look at an example first").
 
 **Links:** [publik listing](https://publikhq.com/potluck) · [live app](https://potluck-blue.vercel.app) · [landing page](https://vedsoni-dev.github.io/potluck/)
 
@@ -62,7 +62,7 @@ npm start
 
 Then open http://localhost:3000. For development, `npm run dev`.
 
-The publik app token is read from `publik-app-token.txt` in this folder (public by design: it only mints capped keys for this app) or `PUBLIK_APP_TOKEN`. Without one, the sign-in screen says so. To check the publik wiring of a built app: `PUBLIK_SELF_TEST=1 npm start` prints `publik self-test: ok potluck 0.3.0` and exits.
+The publik app token is read from `publik-app-token.txt` in this folder (public by design: it only mints capped keys for this app) or `PUBLIK_APP_TOKEN`. Without one, the sign-in screen says so. To check the publik wiring of a built app: `PUBLIK_SELF_TEST=1 npm start` prints `publik self-test: ok potluck 0.3.1` and exits.
 
 ## Deploy
 
